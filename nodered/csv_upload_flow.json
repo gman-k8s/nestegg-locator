@@ -1,0 +1,267 @@
+[
+  {
+    "id": "ne00000000000001",
+    "type": "group",
+    "z": "b0552f7787b3a2d4",
+    "name": "Nest-Egg CSV-Upload",
+    "style": {
+      "label": true
+    },
+    "nodes": [
+      "ne00000000000002",
+      "ne00000000000003",
+      "ne00000000000004",
+      "ne00000000000005",
+      "ne00000000000006",
+      "ne00000000000007",
+      "ne00000000000008",
+      "ne00000000000009",
+      "ne0000000000000a",
+      "ne0000000000000b",
+      "ne0000000000000c"
+    ],
+    "x": 920,
+    "y": 500,
+    "w": 1640,
+    "h": 200
+  },
+  {
+    "id": "ne00000000000002",
+    "type": "function",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Dokument → Nest-Egg-Upload?",
+    "func": "// Nest-Egg-Export (CSV oder ZIP) vom Besitzer annehmen, alles andere ignorieren.\n// Voraussetzung im Node „Set Tokens“:\n//   global.set('nestegg_owner_id', <deine Telegram user_id>);\nconst orig = msg.originalMessage || {};\nconst doc = orig.document || {};\nconst from = orig.from || {};\nconst owner = global.get('nestegg_owner_id');\nconst name = doc.file_name || '';\n\nif (!owner) {\n    node.status({ fill: 'red', shape: 'ring', text: 'nestegg_owner_id fehlt' });\n    node.warn('nestegg_owner_id ist nicht gesetzt – Upload ignoriert');\n    return null;\n}\nif (String(from.id) !== String(owner)) {\n    node.status({ fill: 'grey', shape: 'ring', text: 'fremder Absender' });\n    return null;\n}\nif (!/\\.(csv|zip)$/i.test(name)) {\n    node.status({ fill: 'grey', shape: 'ring', text: 'kein CSV/ZIP: ' + name });\n    return null;\n}\n\nmsg.upload = { chat_id: msg.payload.chatId, user_id: from.id, file_name: name };\nnode.status({ fill: 'yellow', shape: 'ring', text: name });\n\n// Neuere Bibliotheksversionen liefern den Download-Link schon mit\nif (msg.payload.weblink) {\n    msg.url = msg.payload.weblink;\n    return [msg, null];\n}\nconst fileId = doc.file_id || (typeof msg.payload.content === 'string' ? msg.payload.content : null);\nconst token = global.get('telegram_token');\nmsg.url = `https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`;\nreturn [null, msg];",
+    "outputs": 2,
+    "timeout": 30,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1080,
+    "y": 560,
+    "wires": [
+      [
+        "ne00000000000005"
+      ],
+      [
+        "ne00000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "ne00000000000003",
+    "type": "http request",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "getFile",
+    "method": "GET",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": true,
+    "headers": [],
+    "x": 1310,
+    "y": 600,
+    "wires": [
+      [
+        "ne00000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "ne00000000000004",
+    "type": "function",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Download-URL",
+    "func": "if (!msg.payload || !msg.payload.ok) {\n    throw new Error('getFile fehlgeschlagen: ' + JSON.stringify(msg.payload));\n}\nconst token = global.get('telegram_token');\nmsg.url = `https://api.telegram.org/file/bot${token}/${msg.payload.result.file_path}`;\nreturn msg;",
+    "outputs": 1,
+    "timeout": 30,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1480,
+    "y": 600,
+    "wires": [
+      [
+        "ne00000000000005"
+      ]
+    ]
+  },
+  {
+    "id": "ne00000000000005",
+    "type": "http request",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Datei laden",
+    "method": "GET",
+    "ret": "bin",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": true,
+    "headers": [],
+    "x": 1660,
+    "y": 560,
+    "wires": [
+      [
+        "ne00000000000006"
+      ]
+    ]
+  },
+  {
+    "id": "ne00000000000006",
+    "type": "function",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Prüfen + Zielpfad",
+    "func": "if (msg.statusCode !== 200 || !Buffer.isBuffer(msg.payload)) {\n    throw new Error('Download fehlgeschlagen (HTTP ' + msg.statusCode + ')');\n}\n// Pfad im Node-RED-Container; überschreibbar per global 'nestegg_upload_path'\nmsg.filename = global.get('nestegg_upload_path') || '/homeassistant/nestegg/upload/upload.bin';\nreturn msg;",
+    "outputs": 1,
+    "timeout": 30,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1830,
+    "y": 560,
+    "wires": [
+      [
+        "ne00000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "ne00000000000007",
+    "type": "file",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "upload.bin schreiben",
+    "filename": "filename",
+    "filenameType": "msg",
+    "appendNewline": false,
+    "createDir": true,
+    "overwriteFile": "true",
+    "encoding": "none",
+    "x": 2020,
+    "y": 560,
+    "wires": [
+      [
+        "ne00000000000008"
+      ]
+    ]
+  },
+  {
+    "id": "ne00000000000008",
+    "type": "function",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Event-Daten",
+    "func": "node.status({ fill: 'green', shape: 'dot', text: msg.upload.file_name });\nmsg.payload = msg.upload;\nreturn msg;",
+    "outputs": 1,
+    "timeout": 30,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 2200,
+    "y": 560,
+    "wires": [
+      [
+        "ne00000000000009"
+      ]
+    ]
+  },
+  {
+    "id": "ne00000000000009",
+    "type": "ha-fire-event",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Fire nestegg_csv_uploaded",
+    "server": "4117531b.ae4d8c",
+    "version": 2,
+    "event": "nestegg_csv_uploaded",
+    "data": "payload",
+    "dataType": "jsonata",
+    "x": 2400,
+    "y": 600,
+    "wires": [
+      [
+        "ne0000000000000a"
+      ]
+    ]
+  },
+  {
+    "id": "ne0000000000000a",
+    "type": "debug",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Upload gemeldet",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 2420,
+    "y": 660,
+    "wires": []
+  },
+  {
+    "id": "ne0000000000000b",
+    "type": "catch",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Upload-Fehler",
+    "scope": [
+      "ne00000000000002",
+      "ne00000000000003",
+      "ne00000000000004",
+      "ne00000000000005",
+      "ne00000000000006",
+      "ne00000000000007",
+      "ne00000000000008"
+    ],
+    "uncaught": false,
+    "x": 1830,
+    "y": 660,
+    "wires": [
+      [
+        "ne0000000000000c"
+      ]
+    ]
+  },
+  {
+    "id": "ne0000000000000c",
+    "type": "function",
+    "z": "b0552f7787b3a2d4",
+    "g": "ne00000000000001",
+    "name": "Fehler → Event",
+    "func": "// Fehler im Upload-Zweig → HA-Automation meldet ihn per Telegram\nif (!msg.upload) return null;\nmsg.payload = Object.assign({}, msg.upload, { error: (msg.error && msg.error.message) || 'unbekannter Fehler' });\nnode.status({ fill: 'red', shape: 'dot', text: msg.payload.error.substring(0, 50) });\nreturn msg;",
+    "outputs": 1,
+    "timeout": 30,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 2020,
+    "y": 660,
+    "wires": [
+      [
+        "ne00000000000009"
+      ]
+    ]
+  }
+]

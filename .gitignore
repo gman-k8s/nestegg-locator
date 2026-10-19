@@ -1,0 +1,13 @@
+# Echte Inventardaten niemals committen
+*.csv
+*.zip
+!tests/fixtures/*.csv
+
+# Lokale Konfiguration (Pfade, Spaltennamen) – Vorlage: config.example.json
+config.json
+
+__pycache__/
+*.pyc
+
+# Lokale Umgebungsvariablen
+.env

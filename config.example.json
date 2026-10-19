@@ -1,0 +1,14 @@
+{
+  "data_file": "/config/nestegg/inventar.csv",
+  "columns": {
+    "name": ["Name"],
+    "description": ["Beschreibung"],
+    "category": ["Kategorie"],
+    "location": ["Ort"],
+    "quantity": ["Menge"],
+    "notes": ["Bemerkungen"],
+    "extra": ["Hersteller", "Modell", "Strichcode"]
+  },
+  "container_word": "Kiste",
+  "max_chars": 4000
+}
