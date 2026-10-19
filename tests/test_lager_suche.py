@@ -155,6 +155,10 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(result.hits, [])
         self.assertEqual(result.suggestions, [])
 
+    def test_fuzzy_needs_same_first_letter(self):
+        self.assertIn("Zurück in die Zukunft", self.names(ls.search(self.items, "zukumft")))
+        self.assertEqual(ls.search(self.items, "pukunft").hits, [])
+
     def test_unrelated_query_gives_no_junk_suggestions(self):
         self.assertEqual(ls.search(self.items, "tolkin hobit zwerge").suggestions, [])
 
@@ -220,6 +224,18 @@ class AnswerTests(unittest.TestCase):
 
     def test_fuzzy_header(self):
         self.assertIn("ähnlich", ls.answer("galaxy quets", self.items, self.config))
+
+    def test_multiple_terms(self):
+        text = ls.answer("hobbit; galaxy quest; xylophon", self.items, self.config)
+        blocks = text.split("\n\n")
+        self.assertEqual(len(blocks), 3)
+        self.assertIn("Der Hobbit", blocks[0])
+        self.assertIn("Galaxy Quest", blocks[1])
+        self.assertIn("Nichts gefunden für „xylophon“", blocks[2])
+
+    def test_multiple_terms_json(self):
+        data = json.loads(ls.answer("hobbit; kiste 4", self.items, self.config, as_json=True))
+        self.assertEqual([d["mode"] for d in data], ["search", "box"])
 
     def test_overview(self):
         text = ls.answer("lager", self.items, self.config)

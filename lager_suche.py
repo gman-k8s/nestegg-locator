@@ -46,7 +46,7 @@ DEFAULT_CONFIG = {
     "container_word": "Kiste",
     "unknown_locations": ["Unbekannt", "Unknown"],
     "max_chars": 4000,
-    "fuzzy_cutoff": 0.75,
+    "fuzzy_cutoff": 0.8,
     "category_icons": {
         "Filme": "🎬",
         "Spiele": "🎮",
@@ -307,8 +307,15 @@ def exact_score(item, query_norm, tokens):
     return 0
 
 
+def similar(a, b):
+    """Ähnlichkeit 0..1; Tippfehler am Wortanfang sind selten, daher muss der erste Buchstabe passen."""
+    if not a or not b or a[0] != b[0]:
+        return 0.0
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
 def fuzzy_score(item, query_norm, tokens, cutoff):
-    whole = difflib.SequenceMatcher(None, query_norm, item.name_norm).ratio()
+    whole = similar(query_norm, item.name_norm)
     words = item.haystack.split()
     per_token = []
     for token in tokens:
@@ -317,7 +324,7 @@ def fuzzy_score(item, query_norm, tokens, cutoff):
         elif len(token) < 4:
             per_token.append(0.0)
         else:
-            per_token.append(max(difflib.SequenceMatcher(None, token, w).ratio() for w in words))
+            per_token.append(max(similar(token, w) for w in words))
     best = max(whole, min(per_token))
     return best * 50 if best >= cutoff else 0
 
@@ -330,6 +337,8 @@ def suggestions(items, query_norm, limit=3, cutoff=0.6):
     tokens = query_tokens(query_norm)
     scored = []
     for name_norm, name in by_norm.items():
+        if name_norm[:1] != query_norm[:1]:
+            continue
         words = name_norm.split()
         per_token = [max(difflib.SequenceMatcher(None, t, w).ratio() for w in words) for t in tokens]
         whole = difflib.SequenceMatcher(None, query_norm, name_norm).ratio()
@@ -467,7 +476,18 @@ def format_overview(items, config):
     return fit(f"📦 Lager: {len(items)} Items", lines, config["max_chars"])
 
 
+def answer_many(parts, items, config, as_json):
+    """Mehrere Begriffe, getrennt durch „;“ – z. B. vom KI-Agenten: „hobbit; herr der ringe“."""
+    if as_json:
+        return json.dumps([json.loads(answer(p, items, config, True)) for p in parts], ensure_ascii=False)
+    budget = dict(config, max_chars=max(200, config["max_chars"] // len(parts) - 2))
+    return "\n\n".join(answer(p, items, budget) for p in parts)
+
+
 def answer(text, items, config, as_json=False):
+    parts = [p.strip() for p in text.split(";") if p.strip()]
+    if len(parts) > 1:
+        return answer_many(parts, items, config, as_json)
     mode, arg = parse_request(text)
     if mode == "box":
         groups = find_box(items, arg, config)

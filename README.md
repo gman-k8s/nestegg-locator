@@ -103,9 +103,17 @@ python3 lager_suche.py wo ist galaxy quest
 python3 lager_suche.py kiste 4
 python3 lager_suche.py lager
 python3 lager_suche.py --json tolkien
+python3 lager_suche.py "hobbit; herr der ringe"   # mehrere Begriffe, je ein Abschnitt
 python3 lager_suche.py --import upload.bin
 python3 lager_suche.py --data /anderer/pfad/inventar.csv starcraft
 ```
+
+Nest Egg speichert keine Autoren oder Regisseure. Der KI-Agent soll bei solchen Fragen
+deshalb nach konkreten Titeln suchen, mehrere auf einmal mit `;` getrennt. Das steht in der
+Beschreibung von `script.lager_suche`, die das Modell als Tool-Beschreibung sieht.
+
+Unscharfe Treffer (Tippfehler) brauchen denselben Anfangsbuchstaben und eine Ähnlichkeit
+von mindestens `fuzzy_cutoff` (Standard 0.8).
 
 Exit-Code 0 mit Antwort auf stdout; bei Fehlern (kein Inventar, ungültiger Import)
 Exit-Code 1 und Meldung auf stderr.
