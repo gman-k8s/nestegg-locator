@@ -1,3 +1,4 @@
+import importlib.util
 import io
 import json
 import os
@@ -335,6 +336,9 @@ class CliTests(unittest.TestCase):
         self.dir = Path(self.tmp.name)
         self.data = self.dir / "inventar.csv"
         self.data.write_bytes(fixture_bytes())
+        # Quirks sind zufällig – hier immer sachlich, auch wenn ../reveries existiert
+        os.environ["REVERIES_DIR"] = ""
+        self.addCleanup(os.environ.pop, "REVERIES_DIR", None)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -379,6 +383,64 @@ class CliTests(unittest.TestCase):
         with redirect_stdout(out):
             ls.main(["--config", str(cfg), "bluray"])
         self.assertLessEqual(len(out.getvalue().strip()), 50)
+
+
+def write_quirk(root, name, text):
+    path = root / "quirks" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+REVERIES = Path(__file__).resolve().parents[2] / "reveries"
+
+
+@unittest.skipUnless((REVERIES / "reveries" / "__init__.py").exists()
+                     and importlib.util.find_spec("yaml"),
+                     "reveries nicht neben nestegg-locator ausgecheckt oder PyYAML fehlt")
+class ReveriesTests(unittest.TestCase):
+    QUIRK = (
+        "---\nid: hard\nmatch: [die hard]\nguard: [kiste]\n---\n"
+        "## Vorlagen\n- Yippie-ya-yeah: Kiste {kiste}, {ort}.\n"
+    )
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        # Code aus dem echten Checkout, Quirks aus dem Testordner
+        (self.dir / "reveries").symlink_to(REVERIES / "reveries")
+        write_quirk(self.dir, "hard.md", self.QUIRK)
+        self.items = ls.parse_inventory(fixture_bytes(), ls.load_config(None))
+        self.config = ls.load_config(None)
+        self.config["reveries"] = {"dir": str(self.dir), "llm": None}
+
+    def test_quirk_replaces_answer(self):
+        text = ls.answer("wo ist die hard", self.items, self.config, quirks=True)
+        self.assertEqual(text, "Yippie-ya-yeah: Kiste 4, Keller.")
+
+    def test_without_quirks_flag_answer_is_plain(self):
+        text = ls.answer("wo ist die hard", self.items, self.config)
+        self.assertEqual(text, "📦 Die Hard (Bluray) → Kiste 4 · Keller")
+
+    def test_several_boxes_and_json_stay_plain(self):
+        write_quirk(self.dir, "galaxy.md", self.QUIRK.replace("die hard", "galaxy").replace("id: hard", "id: g"))
+        text = ls.answer("galaxy", self.items, self.config, quirks=True)
+        self.assertIn("Treffer", text)
+        data = json.loads(ls.answer("die hard", self.items, self.config, as_json=True, quirks=True))
+        self.assertEqual(data["total"], 1)
+
+    def test_missing_or_broken_reveries_falls_back(self):
+        for path in (str(self.dir / "fehlt"), False):
+            self.config["reveries"]["dir"] = path
+            text = ls.answer("wo ist die hard", self.items, self.config, quirks=True)
+            self.assertEqual(text, "📦 Die Hard (Bluray) → Kiste 4 · Keller")
+        self.config["reveries"]["dir"] = str(self.dir)
+        write_quirk(self.dir, "hard.md", "---\nkaputt: [\n")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            text = ls.answer("wo ist die hard", self.items, self.config, quirks=True)
+        self.assertEqual(text, "📦 Die Hard (Bluray) → Kiste 4 · Keller")
+        self.assertIn("übersprungen", err.getvalue())
 
 
 if __name__ == "__main__":

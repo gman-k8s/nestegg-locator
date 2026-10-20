@@ -118,6 +118,33 @@ von mindestens `fuzzy_cutoff` (Standard 0.8).
 Exit-Code 0 mit Antwort auf stdout; bei Fehlern (kein Inventar, ungültiger Import)
 Exit-Code 1 und Meldung auf stderr.
 
+## Quirks mit reveries (optional)
+
+Liegt [reveries](https://github.com/gman-k8s/reveries) unter `/config/reveries` (also neben
+diesem Repo), bekommen eindeutige Suchtreffer gelegentlich eine sarkastische Antwort:
+
+```
+wo ist indiana jones 4  →  Wovon redest du? Es gibt nur drei Indiana-Jones-Filme.
+                           Aber wenn du dir den Tag versauen willst: Kiste 4.
+```
+
+```sh
+git clone https://github.com/gman-k8s/reveries.git /config/reveries
+```
+
+- Nur bei der Suche, nur wenn alle Treffer in derselben Kiste liegen und nicht unscharf
+  gefunden wurden. `kiste N`, `lager`, `--json` und mehrere Begriffe mit `;` bleiben sachlich.
+- Fakten für die Vorlagen: `{kiste}` (Nummer), `{ort}` (z. B. Keller), `{titel}`.
+- Fehlt reveries oder PyYAML, oder ist eine Quirk-Datei kaputt, antwortet die Suche wie
+  bisher. Die Kistennummer steht in jeder Quirk-Antwort, dafür sorgt reveries.
+- `--sachlich` schaltet Quirks für einen Aufruf ab, z. B. für den KI-Agenten:
+  `lager_suche_sachlich: "python3 /config/nestegg-lager/lager_suche.py --sachlich -- {{ … }}"`.
+- Abweichender Pfad über `"reveries": {"dir": "/pfad"}` in `config.json`, abschalten mit
+  `"dir": false`. Ein LLM für frei formulierte Antworten (nur bei einem Treffer, mit
+  Fakten-Check) lässt sich dort ebenfalls eintragen:
+  `"llm": {"type": "openai", "url": "http://vllm:8000/v1", "model": "…", "share": 0.4}`
+  oder `{"type": "gemini", "model": "…", "api_key": "…"}`.
+
 ## Konfiguration
 
 Ohne `config.json` gelten die Standardwerte für den deutschen Nest-Egg-Export.

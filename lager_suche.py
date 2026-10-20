@@ -46,6 +46,10 @@ DEFAULT_CONFIG = {
     "container_word": "Kiste",
     "unknown_locations": ["Unbekannt", "Unknown"],
     "max_chars": 4000,
+    # Optionale Quirks über reveries (https://github.com/gman-k8s/reveries).
+    # dir: None → $REVERIES_DIR oder <repo>/../reveries; false → aus.
+    # llm: None oder {"type": "openai"|"gemini", "url": …, "model": …, "api_key": …, "share": 0.4}
+    "reveries": {"dir": None, "llm": None},
     "fuzzy_cutoff": 0.8,
     "category_icons": {
         "Filme": "🎬",
@@ -484,7 +488,7 @@ def answer_many(parts, items, config, as_json):
     return "\n\n".join(answer(p, items, budget) for p in parts)
 
 
-def answer(text, items, config, as_json=False):
+def answer(text, items, config, as_json=False, quirks=False):
     parts = [p.strip() for p in text.split(";") if p.strip()]
     if len(parts) > 1:
         return answer_many(parts, items, config, as_json)
@@ -501,7 +505,79 @@ def answer(text, items, config, as_json=False):
     if as_json:
         return dump_json(mode, arg, [h.item for h in result.hits],
                          fuzzy=result.fuzzy, suggestions=result.suggestions)
-    return format_search(result, config)
+    plain = format_search(result, config)
+    return with_reveries(text, result, plain, config) if quirks else plain
+
+
+# ---------------------------------------------------------------- reveries (optional)
+
+def reveries_dir(config):
+    configured = (config.get("reveries") or {}).get("dir")
+    if configured is False or configured == "":
+        return None
+    if configured:
+        return Path(configured)
+    if "REVERIES_DIR" in os.environ:
+        return Path(os.environ["REVERIES_DIR"]) if os.environ["REVERIES_DIR"] else None
+    return SCRIPT_DIR.parent / "reveries"
+
+
+def import_reveries(path):
+    """reveries aus dem geklonten Ordner; None, wenn nicht da – die Suche bleibt dann sachlich."""
+    if path is None or not path.is_dir():
+        return None
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+    try:
+        import reveries
+    except Exception as exc:  # z. B. PyYAML fehlt
+        print(f"reveries nicht verfügbar: {exc!r}", file=sys.stderr)
+        return None
+    return reveries
+
+
+def reveries_llm(reveries, settings):
+    if not settings:
+        return None
+    from reveries import llm
+    if settings.get("type") == "gemini":
+        return llm.gemini(settings["model"], settings["api_key"])
+    return llm.openai_compatible(settings["url"], settings.get("model", "default"),
+                                 api_key=settings.get("api_key"))
+
+
+def with_reveries(question, result, plain, config):
+    """Würzt eine Suchantwort mit einem Quirk – nur bei eindeutigen Treffern in einer Kiste."""
+    if result.fuzzy or not result.hits:
+        return plain
+    items = [h.item for h in result.hits]
+    if any(i.unknown for i in items) or len({i.location for i in items}) != 1:
+        return plain
+    path = reveries_dir(config)
+    reveries = import_reveries(path)
+    if reveries is None:
+        return plain
+    try:
+        item = items[0]
+        word = re.escape(config["container_word"])
+        number = re.fullmatch(rf"{word}\s+(\S+)", item.container, re.I)
+        kiste = number.group(1) if number else item.container
+        if not kiste:
+            return plain
+        settings = config["reveries"].get("llm") or {}
+        return reveries.apply(
+            plain=plain,
+            facts={"kiste": kiste, "ort": item.place, "titel": item.name},
+            project="nestegg",
+            texts=[question] + [i.name for i in items],
+            quirks=reveries.load(path / "quirks"),
+            llm=reveries_llm(reveries, settings),
+            llm_share=settings.get("share", 0.4),
+            persona=reveries.load_persona(path / "persona.md"),
+        )
+    except Exception as exc:  # reveries darf die Suche nie kaputt machen
+        print(f"reveries übersprungen: {exc!r}", file=sys.stderr)
+        return plain
 
 
 def dump_json(mode, query, items, **extra):
@@ -585,6 +661,7 @@ def main(argv=None):
     parser.add_argument("--import", dest="import_src", metavar="DATEI",
                         help="Neue CSV/ZIP prüfen und als Inventar übernehmen")
     parser.add_argument("--json", action="store_true", help="Ergebnis als JSON")
+    parser.add_argument("--sachlich", action="store_true", help="ohne reveries-Quirks antworten")
     parser.add_argument("--config", help="Pfad zur config.json (Standard: neben dem Skript)")
     parser.add_argument("--data", help="Pfad zur Inventar-CSV (überschreibt config)")
     args = parser.parse_args(argv)
@@ -603,7 +680,8 @@ def main(argv=None):
         text = " ".join(args.text)
         if not text.strip():
             parser.error("Suchtext fehlt")
-        print(answer(text, load_inventory(target, config), config, as_json=args.json))
+        print(answer(text, load_inventory(target, config), config, as_json=args.json,
+                     quirks=not args.sachlich))
         return 0
     except InventoryError as exc:
         print(f"❌ {exc}", file=sys.stderr)

@@ -10,5 +10,6 @@
     "extra": ["Hersteller", "Modell", "Strichcode"]
   },
   "container_word": "Kiste",
-  "max_chars": 4000
+  "max_chars": 4000,
+  "reveries": {"dir": null, "llm": null}
 }
