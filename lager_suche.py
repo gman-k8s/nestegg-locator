@@ -67,8 +67,9 @@ DEFAULT_CONFIG = {
 REQUIRED_FIELDS = ("name", "location")
 STOPWORDS = {"der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "mein", "meine",
              "meinen", "und", "von", "the", "a", "an", "of"}
+VERBS = r"(?:ist|sind|liegt|liegen|steht|stehen|finde\s+ich)"
 SEARCH_PREFIX = re.compile(
-    r"^(?:wo\s+(?:ist|sind|liegt|liegen|steht|stehen|finde\s+ich)|lager(?:suche)?|suche?)\b\s*:?\s*(.*)$"
+    rf"^(?:wo\s+{VERBS}|in\s+welche[rm]?\s+kiste\s+{VERBS}|lager(?:suche)?|suche?)\b\s*:?\s*(.*)$"
 )
 BOX_PREFIX = re.compile(r"^kiste\b\s*(.*)$")
 OVERVIEW = {"lager", "kisten", "kiste", "lagersuche"}
